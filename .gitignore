@@ -6,3 +6,4 @@ database/medicalimages.db-shm
 database/medicalimages.db-wal
 /infomation/
 /format_html
+/format_html_over
