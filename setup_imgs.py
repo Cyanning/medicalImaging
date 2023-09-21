@@ -27,7 +27,18 @@ class Infomation(BeautifulSoup):
             os.mkdir(file)
         self.filepath = file + "/"
 
+    def completeness_check(self):
+        """
+        数据完整性检测
+        """
+        pass
+
     def save_images(self):
+        """
+
+        :return:
+        :rtype:
+        """
         for i, img in enumerate(self.find_all("img")):
             if not self.image_right_size(img.attrs):
                 continue
@@ -61,6 +72,11 @@ class Infomation(BeautifulSoup):
             img.attrs["src"] = "{}{}/{}".format(self.absolute_path, self.name, newfilename)
 
     def save_html(self):
+        """
+
+        :return:
+        :rtype:
+        """
         if not os.path.exists(newpath := self.filepath + self.name + ".html"):
             with open(newpath, 'w', encoding='UTF-8') as f:
                 f.write(self.prettify(formatter='html'))
@@ -85,6 +101,13 @@ class Infomation(BeautifulSoup):
 
     @classmethod
     def read_local(cls, path: str):
+        """
+
+        :param path:
+        :type path:
+        :return:
+        :rtype:
+        """
         with open(path, 'r', encoding='utf-8') as f:
             context = f.read()
             s = path.rfind("/")
@@ -94,6 +117,13 @@ class Infomation(BeautifulSoup):
 
     @staticmethod
     def image_right_size(attrs: dict):
+        """
+
+        :param attrs:
+        :type attrs:
+        :return:
+        :rtype:
+        """
         if "width" in attrs and "height" in attrs:
             return int(attrs["width"]) > 100 or int(attrs["height"]) > 100
         elif "style" in attrs:
