@@ -1,14 +1,23 @@
 import os.path
 import time
 import requests
-from bs4 import BeautifulSoup
-from bs4.element import Tag
+import bs4 as bs
 from model import WikiUrlPrefix
 from mi_exception import GetLinkFailed
 
 
+class WikiDocument(bs.BeautifulSoup):
+    def __init__(self, html_document: str, title: str):
+        super().__init__(html_document, "html5lib")
+        self.title = title
+
+    @classmethod
+    def load_from(cls, link: str):
+        pass
+
+
 class ImgsDownloader:
-    def __init__(self, file_prefix: str, soup: BeautifulSoup):
+    def __init__(self, file_prefix: str, soup: bs.BeautifulSoup):
         self.file_prefix = file_prefix
         self.soup = soup
         self.failed_urls = []
@@ -79,9 +88,7 @@ class WikiDownloader:
         with open(self.download_fpath, 'w+', encoding="UTF-8") as f:
             f.write("<html><head><title>{}</title></head><body>".format(title.get_text()))
             f.write(title.prettify(formatter="html"))
-            for tag in content.children:
-                if type(tag) != Tag:
-                    continue
+            for tag in filter(lambda x: isinstance(x, Tag), content.children):
                 if self.exit_node(tag):
                     break
                 if self.skip_node(tag):
@@ -119,8 +126,9 @@ class WikiDownloader:
 
     @staticmethod
     def delete_attrs(ctag: Tag):
-        for _t in ctag.descendants:
-            if type(_t) != Tag or _t.name == "img":
+        for _t in filter(lambda x: isinstance(x, Tag), ctag.descendants):
+            if _t.name == "img":
                 continue
-            _t.attrs.clear()
+            else:
+                _t.attrs.clear()
         return ctag
