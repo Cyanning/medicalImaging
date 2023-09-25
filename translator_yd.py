@@ -3,8 +3,7 @@ import time
 import uuid
 import requests
 import hashlib
-from mi_exception import TranslateError
-from model import TransFile
+from translate_model import TransFile
 
 
 class TranslateYd:
@@ -65,6 +64,4 @@ class TranslateYd:
                 with open(self.current_file.path_save_as('zh'), 'w', encoding='UTF-8') as f:
                     f.write(result["data"]["translation"])
             else:
-                raise TranslateError(
-                    "{}: {}".format(result["errorMessage"], result["errorCode"])
-                )
+                raise Exception("{}: {}".format(result["errorMessage"], result["errorCode"]))

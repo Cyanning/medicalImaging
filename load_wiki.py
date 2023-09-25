@@ -1,104 +1,119 @@
-import os.path
+import os
 import time
 import requests
+import sqlite3
 import bs4 as bs
-from model import WikiUrlPrefix
-from mi_exception import GetLinkFailed
+from settings import *
 
 
 class WikiDocument(bs.BeautifulSoup):
-    def __init__(self, html_document: str, title: str):
+    def __init__(self, html_document: str, title: str, state=0):
         super().__init__(html_document, "html5lib")
         self.title = title
+        self.state = state
+        if not os.path.exists(file := "D:/medical_images/ct_infomations/{}".format(title)):
+            os.mkdir(file)
+        self.filepath = file + "/"  # 本地真实路径
 
-    @classmethod
-    def load_from(cls, link: str):
-        pass
-
-
-class ImgsDownloader:
-    def __init__(self, file_prefix: str, soup: bs.BeautifulSoup):
-        self.file_prefix = file_prefix
-        self.soup = soup
-        self.failed_urls = []
-
-    def imgs_download(self):
-        results = self.soup.find_all("img", {"class": "mw-file-element"})
-        for num, element in enumerate(results, start=1):
-            if int(element.attrs["width"]) < 100 and int(element.attrs["height"]) < 100:
-                continue
-            url = "https:{}".format(element.attrs["src"])
-            data = requests.get(url, headers={"Referer": WikiUrlPrefix})
-            if data.status_code == 200:
-                try:
-                    extend = url[url.rindex("."):].lower()
-                    assert len(extend) < 10
-                except (ValueError, AssertionError):
-                    extend = ".jpg"
-                with open("infomation/{}-{}{}".format(self.file_prefix, num, extend), 'wb') as f:
-                    for chunk in data.iter_content():
-                        f.write(chunk)
-            else:
-                self.failed_urls.append([url, "img", f"{self.file_prefix}-{num}"])
-            time.sleep(0.1)
-
-
-class WikiDownloader:
-    def __init__(self, link: str):
-        self.title = link[link.rfind("/") + 1:]
-        self.cookie = None
-        self.soup = BeautifulSoup()
-        if os.path.exists(self.download_fpath):
-            if os.path.exists(self.translated_fpath):
-                self.state = 2
-            else:
-                self.state = 1
-        else:
-            self.state = 0
-
-    @classmethod
-    def getting(cls, link: str):
-        obj = cls(link)
-        if obj.state == 0:
-            with open("project/wiki_cookie.txt", 'r', encoding="UTF-8") as f:
-                cookie = f.read()
-            html = requests.get(link, headers={"Cookie": cookie})
-            if html.status_code == 200:
-                obj.soup = BeautifulSoup(html.text, "html5lib")
-            else:
-                raise GetLinkFailed(link, "html", obj.title)
-
-    @property
-    def download_fpath(self):
-        return "infomation/{}.html".format(self.title)
-
-    @property
-    def translated_fpath(self):
-        return "infomation/{}_zh.html".format(self.title)
-
-    def text_anlysis(self):
+    def origin_text_downloading(self):
         main_tag = self.soup.find("main")
         title = main_tag.find("header").find("h1")
-        title = self.delete_tags(title)
+        title = self._delete_tags(title)
         title = self.delete_attrs(title)
 
         content = main_tag.find("div", {"id": "bodyContent"}).find("div", {"class": "mw-parser-output"})
-        content = self.delete_tags(content)
+        content = self._delete_tags(content)
 
-        with open(self.download_fpath, 'w+', encoding="UTF-8") as f:
+        with open(f"{ORIGIN_FILE_PATH}{self.title}.html", 'w+', encoding="UTF-8") as f:
             f.write("<html><head><title>{}</title></head><body>".format(title.get_text()))
             f.write(title.prettify(formatter="html"))
-            for tag in filter(lambda x: isinstance(x, Tag), content.children):
-                if self.exit_node(tag):
+            for tag in filter(lambda x: isinstance(x, bs.Tag), content.children):
+                if self._exit_node(tag):
                     break
-                if self.skip_node(tag):
+                if self._skip_node(tag):
                     continue
-                tag = self.delete_attrs(tag)
+                tag = self._delete_attrs(tag)
                 f.write(tag.prettify(formatter="html"))
             f.write("</body></html>")
 
+    def save_images(self):
+        """
+        保存图片
+        """
+        for i, img in enumerate(filter(self.image_right_size, self.find_all("img"))):
+            url = str(img.attrs["src"])
+            try:
+                extend = url[url.rindex("."):]
+                assert len(extend) < 5
+            except (ValueError, AssertionError):
+                extend = ".jpg"
+            filename = "{}_{}{}".format(self.title, i, extend)
+
+            if not os.path.exists(self.filepath + filename):
+                if not url.startswith("http"):
+                    url = "https:{}".format(url)
+                try:
+                    if 'wikipedia' in url:
+                        data = requests.get(url, headers=WIKI_HEADERS)
+                    else:
+                        data = requests.get(url)
+                    print("{} downloaded".format(filename), data.status_code)
+                    if data.status_code < 400:
+                        with open(self.filepath + filename, 'wb') as f:
+                            for chunk in data.iter_content():
+                                f.write(chunk)
+                except requests.RequestException as e:
+                    print("Image download failed:", e)
+                finally:
+                    time.sleep(1)
+
+            img.attrs["src"] = "{}{}/{}".format(self.absolute_path, self.title, filename)
+
+    def change_legends(self):
+        """
+        改变legends数据infomaton地址
+        """
+        with sqlite3.connect(DB_PATH) as db:
+            cur = db.cursor()
+            cur.execute(
+                "SELECT value, infomation FROM mi_legends WHERE infomation LIKE ? AND infomation NOT LIKE ?",
+                (f"%{self.title}%", f"{self.absolute_path}%")
+            )
+            for value, origin_link in cur.fetchall():
+                cur.execute(
+                    "INSERT INTO mi_legend_infomation_history (legend_value, origin_link) VALUES (?,?)",
+                    (value, origin_link)
+                )
+                cur.execute(
+                    "UPDATE mi_legends SET infomation=? WHERE value=?",
+                    ("{}{}/{}.html".format(self.absolute_path, self.title, self.title), value)
+                )
+                db.commit()
+
+    def save_html(self):
+        """
+        保存修改当富文本
+        """
+        if not os.path.exists(newpath := self.filepath + self.title + ".html"):
+            with open(newpath, 'w', encoding='UTF-8') as f:
+                f.write(self.prettify(formatter='html'))
+
+    @classmethod
+    def load_from_get(cls, link: str, name: str):
+        html = requests.get(link, headers=WIKI_HEADERS)
+        if html.status_code == 200:
+            return cls(html.text, name, 1)
+        else:
+            raise requests.RequestException("Status_code: {}".format(html.status_code))
+
+    @classmethod
+    def load_from_local(cls, path: str, name: str, state: int):
+        with open(path, 'w', encoding='utf-8') as f:
+            context = f.read().strip()
+            return cls(context, name, state)
+
     @staticmethod
-    def exit_node(ctag: Tag):
+    def _exit_node(ctag: bs.Tag):
         flag = False
         if ctag.name == "h2" and ctag.find(attrs={"id": "Notes"}) is not None:
             flag = True
@@ -109,14 +124,14 @@ class WikiDownloader:
         return flag
 
     @staticmethod
-    def skip_node(ctag: Tag):
+    def _skip_node(ctag: bs.Tag):
         flag = False
         if ctag.name == "style":
             flag = True
         return flag
 
     @staticmethod
-    def delete_tags(ctag: Tag):
+    def _delete_tags(ctag: bs.Tag):
         for param in [{"name": "span", "attrs": {"class": "mw-editsection"}},
                       {"name": "sup", "attrs": {"class": "reference"}},
                       {"name": "table", "attrs": {"class": "infobox"}}]:
@@ -125,10 +140,30 @@ class WikiDownloader:
         return ctag
 
     @staticmethod
-    def delete_attrs(ctag: Tag):
-        for _t in filter(lambda x: isinstance(x, Tag), ctag.descendants):
+    def _delete_attrs(ctag: bs.Tag):
+        for _t in filter(lambda x: isinstance(x, bs.Tag), ctag.descendants):
             if _t.name == "img":
                 continue
             else:
                 _t.attrs.clear()
         return ctag
+
+    @staticmethod
+    def image_right_size(img: bs.Tag):
+        """
+        检测img标签合法性
+        """
+        if "width" in img.attrs and "height" in img.attrs:
+            return int(img.attrs["width"]) > 100 or int(img.attrs["height"]) > 100
+        elif "style" in img.attrs:
+            w = h = 0
+            for css in img.attrs['style'].split(';'):
+                css = css.strip()
+                try:
+                    if css.startswith("height"):
+                        w = int(css[css.index(":") + 1:css.index("px")])
+                    elif css.startswith("width"):
+                        h = int(css[css.index(":") + 1:css.index("px")])
+                except ValueError:
+                    w = h = 101
+            return w > 100 or h > 100

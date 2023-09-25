@@ -4,8 +4,7 @@ import hmac
 import base64
 import hashlib
 import requests
-from mi_exception import TranslateError
-from model import TransFile
+from translate_model import TransFile
 
 
 class TransFileBd(TransFile):
@@ -105,7 +104,7 @@ class TranslateBd:
         if result["code"] == 0 and result["msg"] == "success":
             self.current_file.request_id = result["data"]["requestId"]
         else:
-            raise TranslateError(result["msg"])
+            raise Exception(result["msg"])
 
     def query_trans_handle(self) -> bool:
         result = self._query_trans()
@@ -113,14 +112,14 @@ class TranslateBd:
         if result["code"] == 0 and result["msg"] == "success":
             if result["data"]["status"] == 1:
                 if result["data"]["name"].lower() != self.current_file.fname.lower():
-                    raise TranslateError("The requested file does not match the current file.")
+                    raise Exception("The requested file does not match the current file.")
                 result_file = requests.get(result["data"]["fileSrcUrl"])
                 with open(self.current_file.path_save_as(result["data"]["to"]), 'wb') as f:
                     f.write(result_file.content)
                 return True
             elif result["data"]["status"] == 2:
-                raise TranslateError(result["data"]["reason"])
+                raise Exception(result["data"]["reason"])
             else:
                 return False
         else:
-            raise TranslateError(result["msg"])
+            raise Exception(result["msg"])

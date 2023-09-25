@@ -1,4 +1,7 @@
 DB_PATH = 'database/medicalimages.db'
+OBS_PATH = "http://obs.xlhcq.com/wankang/ct_infomations/"
+ORIGIN_FILE_PATH = "infomation/"
+TRANSLATE_RESULT_PATH = "format_html/"
 WIKI_HEADERS = {
     "Dnt": "1",
     "Referer": "https://en.wikipedia.org/",
@@ -6,7 +9,6 @@ WIKI_HEADERS = {
     "Sec-Ch-Ua-Mobile": "?0",
     "Sec-Ch-Ua-Platform": "Windows",
     "User-Agent":
-        "Mozilla/5.0(Windows NT 10.0;Win64; x64) AppleWebKit/537.36(KHTML, likeGecko) Chrome/117.0.0.0 Safari/537.36"
+        "Mozilla/5.0(Windows NT 10.0;Win64; x64) AppleWebKit/537.36(KHTML, likeGecko) Chrome/117.0.0.0 Safari/537.36",
+    "Cookie": ""
 }
-OBS_PATH = "http://obs.xlhcq.com/wankang/ct_infomations/"
-WIKI_COOKIE = ""
